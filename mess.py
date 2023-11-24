@@ -3,9 +3,9 @@ import os
 import time
 import chardet
 
-token = '6673857772:AAH4ZFcC9PFGSPs7o447QP_UQJNUiLjaVLw'
+token = '6697554084:AAESe8F1SpsMwRgZa_Y5GwAX7Hf9ac6uQZ8'
 bot = telebot.TeleBot(token, parse_mode=None)
-users_id = [314943379]  # Замените на свой список ID пользователей
+users_id = [5677980129]  # Замените на свой список ID пользователей
 
 def send_message(txt_file):
     if os.path.exists(txt_file) and os.stat(txt_file).st_size > 0:

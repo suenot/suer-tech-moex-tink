@@ -4,30 +4,31 @@ import emoji
 from FinamPy import FinamPy
 from FinamPy.Config import Config
 
+MAX_ATTEMPTS = 10
+WAIT_INTERVAL_SECONDS = 10
+
 
 def subscribe_and_save_price(asset, result_prices_arr):
     fp_provider = FinamPy(Config.AccessToken)
-    # print(asset)
+    print(asset)
 
     def on_order_book(order_book):
-        # print('order_book')
         if asset['code'] not in result_prices_arr:
             result_prices_arr[asset['code']] = order_book.asks[0].price
 
-    # Установите обработчик события прихода подписки на стакан
     fp_provider.on_order_book = on_order_book
-    # print('Установка обработчик события прихода подписки на стакан')
-
-    # Подпишитесь на стакан для текущего актива
     fp_provider.subscribe_order_book(asset['code'], asset['board'], 'orderbook1')
-    # print('Подписка на стакан для текущего актива')
 
-    # Добавьте цикл ожидания для чтения данных
-    # print('Ожидание')
-    while asset['code'] not in result_prices_arr:
-        pass
+    # Добавьте цикл ожидания с ограничением по попыткам
+    attempts = 0
+    while asset['code'] not in result_prices_arr and attempts < MAX_ATTEMPTS:
+        time.sleep(WAIT_INTERVAL_SECONDS)
+        attempts += 1
 
-    # Отпишитесь от стакана
+    if asset['code'] not in result_prices_arr:
+        print(f"Котировки для {asset['code']} не пришли после {MAX_ATTEMPTS} попыток.")
+        return False
+
     fp_provider.unsubscribe_order_book('orderbook1', asset['code'], asset['board'])
     fp_provider.close_channel()
 
@@ -61,15 +62,15 @@ def calculate_difference(currience, basket_price):
         value_third = float(third_element) / x
 
         # Вычисляем разницу
-        difference = "{:.2f}".format(value_third - value_second)
+        difference = "{:.3f}".format(value_third - value_second)
         result = f"Спред {quarterly} - {perpetual}: {difference}\n"
 
         if float(second_element) > float(first_element):
-            difference1 = f"{perpetual}: {'{:.2f}'.format(value_second)} > cпот: {'{:.2f}'.format(value_first)}\n"
+            difference1 = f"{perpetual}: {'{:.3f}'.format(value_second)} > cпот: {'{:.3f}'.format(value_first)}\n"
         if float(second_element) < float(first_element):
-            difference1 = f"Cпот: {'{:.2f}'.format(value_first)} > {perpetual}: {'{:.2f}'.format(value_second)}\n"
-        if '{:.2f}'.format(float(second_element)) == '{:.2f}'.format(float(first_element)):
-            difference1 = f"Cпот: {'{:.2f}'.format(value_first)} = {perpetual}: {'{:.2f}'.format(value_second)}\n"
+            difference1 = f"Cпот: {'{:.3f}'.format(value_first)} > {perpetual}: {'{:.3f}'.format(value_second)}\n"
+        if '{:.3f}'.format(float(second_element)) == '{:.3f}'.format(float(first_element)):
+            difference1 = f"Cпот: {'{:.3f}'.format(value_first)} = {perpetual}: {'{:.3f}'.format(value_second)}\n"
 
         result = result + difference1
         print(result)
@@ -77,6 +78,17 @@ def calculate_difference(currience, basket_price):
         return result
 
 def write_spread(currience, diff):
+    txt = 'usd.txt'
+    if currience == eur:
+        txt = 'eur.txt'
+    if currience == cny:
+        txt = 'cny.txt'
+
+    with open(txt, 'w', encoding='utf-8') as file:
+        pass
+        file.write(diff)
+
+def write_connection_error(currience, diff):
     txt = 'usd.txt'
     if currience == eur:
         txt = 'eur.txt'
@@ -107,6 +119,22 @@ def read_x_from_file(tvh_txt):
     except ValueError:
         # Обработка случая, когда содержимое файла не является числом
         return None
+
+
+def read_firstspread_and_signal_from_file(tvh_txt):
+    try:
+        with open(tvh_txt, 'r') as file:
+            data = file.read().split(', ')
+            values = [float(value) for value in data]
+            return values
+    except FileNotFoundError:
+        # Обработка случая, когда файл не найден
+        return None
+    except ValueError:
+        # Обработка случая, когда содержимое файла не является числом или не может быть разделено запятой и пробелом
+        return None
+
+
 
 # Чтение значения y из файла usd_signal.txt
 def read_y_from_file(signal_txt):
@@ -145,6 +173,38 @@ def check_signal(curr, spread_txt, tvh_txt, signal_txt):
             write_signal_to_file(signal, signal_txt)
 
 
+def check_only_signal(curr, spread_txt, signal_txt):
+    with open(spread_txt, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+    for line in lines:
+        if "Спред" in line:
+            parts = line.split()
+            x_index = parts.index('Спред') + 4
+            spread = parts[x_index]
+    z = float(spread)  # Замените это на получение текущего значения z
+    if read_firstspread_and_signal_from_file(signal_txt) is not None:
+        x = read_firstspread_and_signal_from_file(signal_txt) # Замените это на получение текущего значения y
+
+
+    # Проверяем условия и записываем сигнал, если они выполняются
+        if float(x[0]) < float(x[1]):
+            if z >= float(x[1]):
+                bell_emoji = "🔔"
+                signal = f"{bell_emoji}{curr}: спред вырос до {x[1]}"
+                write_signal_to_file(signal, signal_txt)
+        elif  float(x[0]) > float(x[1]):
+            if z <= float(x[1]):
+                bell_emoji = "🔔"
+                signal = f"{bell_emoji}{curr}: спред снизился до {x[1]}"
+                write_signal_to_file(signal, signal_txt)
+
+# Создаем файлы под запрос пользователя о позах-----------------------------------------------------------------------------
+def createTxtFile(txt_file):
+    try:
+        f = open(txt_file, 'r')
+    except FileNotFoundError as err:
+        with open(txt_file, 'w') as fw:
+            pass
 
 usd = (
 
@@ -167,6 +227,11 @@ cny = (
     {'board': 'FUT', 'code': 'CRZ3'}  # SIZ3
 )
 
+# Создаем файлы для оповещения по сигналу
+createTxtFile('usd_firstspread_and_signal.txt')
+createTxtFile('eur_firstspread_and_signal.txt')
+createTxtFile('cny_firstspread_and_signal.txt')
+
 while True:
 
 
@@ -184,31 +249,46 @@ while True:
     # Подпишитесь на стакан для каждого актива
     for asset in usd:
         subscribe_and_save_price(asset, usd_prices)
+        if not subscribe_and_save_price(asset, usd_prices):
+            write_connection_error(usd, "Котировки отсутствуют")
+            # Если subscribe_and_save_price вернуло False, перезапустите цикл
+            continue
 
     # В asset_prices будут сохранены цены активов
     print(usd_prices)
     diff = calculate_difference(usd, usd_prices)
-    write_spread(usd, diff)
+    if diff is not None:
+        write_spread(usd, diff)
 
 
     # Подпишитесь на стакан для каждого актива
     for asset in eur:
         subscribe_and_save_price(asset, eur_prices)
+        if not subscribe_and_save_price(asset, eur_prices):
+            write_connection_error(eur, "Котировки отсутствуют")
+            # Если subscribe_and_save_price вернуло False, перезапустите цикл
+            continue
 
     # В asset_prices будут сохранены цены активов
     print(eur_prices)
     diff = calculate_difference(eur, eur_prices)
-    write_spread(eur, diff)
+    if diff is not None:
+        write_spread(eur, diff)
 
 
     # Подпишитесь на стакан для каждого актива
     for asset in cny:
         subscribe_and_save_price(asset, cny_prices)
+        if not subscribe_and_save_price(asset, cny_prices):
+            write_connection_error(cny, "Котировки отсутствуют")
+            # Если subscribe_and_save_price вернуло False, перезапустите цикл
+            continue
 
     # В asset_prices будут сохранены цены активов
     print(cny_prices)
     diff = calculate_difference(cny, cny_prices)
-    write_spread(cny, diff)
+    if diff is not None:
+        write_spread(cny, diff)
 
 
 
@@ -220,6 +300,10 @@ while True:
     check_signal('USD', 'usd.txt', 'usd_spread_only.txt', 'usd_signal_only.txt')
     check_signal('EUR', 'eur.txt', 'eur_spread_only.txt', 'eur_signal_only.txt')
     check_signal('CNY', 'cny.txt', 'cny_spread_only.txt', 'cny_signal_only.txt')
+    check_only_signal('USD', 'usd.txt', 'usd_firstspread_and_signal.txt')
+    check_only_signal('EUR', 'eur.txt', 'eur_firstspread_and_signal.txt')
+    check_only_signal('CNY', 'cny.txt', 'cny_firstspread_and_signal.txt')
 
 
     time.sleep(5)
+
