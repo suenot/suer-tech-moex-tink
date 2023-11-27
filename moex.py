@@ -1,46 +1,81 @@
-from FinamPy import FinamPy
-from FinamPy.Config import Config
+import asyncio
+import os
+from datetime import timedelta
+from tinkoff.invest import AsyncClient, CandleInterval
+from tinkoff.invest.schemas import MarketDataRequest, Quotation
 
-if __name__ == '__main__':
-    write_to_file = lambda filename, content: open(filename, "w").write(content)
-    # Создаем экземпляр FinamPy и подключаемся с использованием токена доступа
-    fp_provider = FinamPy(Config.AccessToken)
+TOKEN = 't.ZsrYdAC-An0uyHnudfvRJ2MVp39P77b7I7MNsCa3p5zPFpi0xbvLraeMSjQEAdwXN4xaSlCE-w_M6kWlsMpKkA'
 
-    # Определяем тикеры и площадки
-    tickers = [
-        ('CETS', 'USDRUB'),   # USDRUB
-        ('FUT', 'SiZ3'),      # SIZ3
-        ('CETS', 'USDRUBF')   # USDRUBF
-    ]
+class AsyncMarketDataStreamManager:
+    def __init__(self, market_data_stream):
+        self._market_data_stream_service = market_data_stream
+        self._market_data_stream = None
+        self._requests = asyncio.Queue()
+        self._unsubscribe_event = asyncio.Event()
 
-    # Создаем словарь для хранения цен по активам
-    asset_prices = {}
-    write_to_file = lambda filename, content: open(filename, "w").write(content)
+    async def _get_request_generator(self):
+        while not self._unsubscribe_event.is_set() or not self._requests.empty():
+            try:
+                request = await asyncio.wait_for(self._requests.get(), timeout=1.0)
+            except asyncio.exceptions.TimeoutError:
+                pass
+            else:
+                yield request
+                self._requests.task_done()
 
-    # Запрашиваем цены по каждому активу
-    for board, code in tickers:
+    @property
+    def last_price(self):
+        return LastPriceStream(parent_manager=self)
 
-        fp_provider.on_order_book = lambda order_book: write_to_file("price_moex.txt", f'{code}: {order_book.asks[0].price}')  # Обработчик события прихода подписки на стакан
-        fp_provider.subscribe_order_book(code, board, 'orderbook1')  # Подписываемся на стакан тикера
-        fp_provider.unsubscribe_order_book('orderbook1', code, board)  # Отписываемся от стакана тикера
-        fp_provider.close_channel()  # Закрываем канал перед выходом
+    def subscribe(self, market_data_request):
+        self._requests.put_nowait(market_data_request)
 
-    # Выводим цены активов
-    for code, price in asset_prices.items():
-        print(f'Цена для {code}: {price}')
+    def unsubscribe(self, market_data_request):
+        self._requests.put_nowait(market_data_request)
 
-    # Рассчитываем разницу в процентах между активами
-    if 'USDRUB' in asset_prices and 'SIZ3' in asset_prices and 'USDRUBF' in asset_prices:
-        usdrub_price = asset_prices['USDRUB']
-        siz3_price = asset_prices['SIZ3']
-        usdrubf_price = asset_prices['USDRUBF']
+    def stop(self):
+        self._unsubscribe_event.set()
 
-        # Расчет разницы в процентах
-        price_difference = ((usdrub_price - siz3_price) / siz3_price) * 100
-        price_difference_usdrubf = ((usdrubf_price - siz3_price) / siz3_price) * 100
+    def __aiter__(self):
+        self._unsubscribe_event.clear()
+        self._market_data_stream = (
+            self._market_data_stream_service.create_market_data_stream(
+                self._get_request_generator()
+            )
+        ).__aiter__()
 
-        print(f'Разница между USDRUB и SIZ3: {price_difference:.2f}%')
-        print(f'Разница между USDRUBF и SIZ3: {price_difference_usdrubf:.2f}%')
+        return self
 
-    # Закрываем канал
-    fp_provider.close_channel()
+    async def __anext__(self):
+        return await self._market_data_stream.__anext__()
+
+# Assuming Quotation is used for representing last prices
+class LastPriceStream:
+    def __init__(self, parent_manager):
+        self.parent_manager = parent_manager
+        self.payload = Quotation(units=0, nano=0)
+async def main():
+    async with AsyncClient(TOKEN) as client:
+        async_market_data_stream_manager = AsyncMarketDataStreamManager(
+            market_data_stream=client
+        )
+
+        # Subscribe to last price stream
+        async_market_data_stream_manager.subscribe(
+            MarketDataRequest(
+                figi="BBG004730N88",
+                depth=1,  # Depth is set to 1 to get only the last price
+                interval=CandleInterval.CANDLE_INTERVAL_HOUR,  # Adjust with the correct interval
+            )
+        )
+
+        # Iterate over the stream to get the last price
+        async for response in async_market_data_stream_manager:
+            if isinstance(response, LastPriceStream):
+                print("Last Price:", response.payload)
+
+        # Stop the market data stream manager when done
+        async_market_data_stream_manager.stop()
+
+if __name__ == "__main__":
+    asyncio.run(main())
