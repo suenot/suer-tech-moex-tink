@@ -11,18 +11,16 @@ from config import tinkoff
 
 TOKEN = tinkoff
 
-#
 # def main():
 #     with Client(TOKEN) as client:
-#         client.getLatestPrices()
-#         inst = client.instruments.currencies()
+#         inst = client.instruments.find_instrument(query='MGNT')
 #         print(inst)
 #         for cur in inst.instruments:
 #             print(cur)
 #             print('')
 # main()
 
-#
+
 import json
 import time
 import emoji
@@ -46,6 +44,7 @@ def subscribe_and_save_price(asset, result_prices_arr):
         for marketdata in market_data_stream:
             if marketdata.candle:
                 last_price = marketdata.candle.close
+                print(last_price)
 
                 last_price_units = last_price.units
                 last_price_nano = last_price.nano
@@ -68,11 +67,6 @@ def calculate_difference(currience, basket_price):
         perpetual = 'USDRUBF'
         x = 1000
 
-    if currience == eur:
-        quarterly = 'Eu'
-        perpetual = 'EURRUBF'
-        x = 1000
-
     if currience == cny:
         quarterly = 'Cny'
         perpetual = 'CNYRUBF'
@@ -92,14 +86,6 @@ def calculate_difference(currience, basket_price):
             value_second = float(second_element)
             value_third = float(third_element) / x
 
-        else:
-            values = list(basket_price.values())
-            second_element = values[0]
-            third_element = values[1]
-
-            # Извлекаем значения из элементов
-            value_second = float(second_element)
-            value_third = float(third_element) / x
 
         # Вычисляем разницу
         difference = "{:.3f}".format(value_third - value_second)
@@ -119,12 +105,64 @@ def calculate_difference(currience, basket_price):
 
         return result
 
+def calculate_difference_eur(currience, basket_price):
+    quarterly = 'Eu'
+    perpetual = 'EURRUBF'
+    x = 1000
+
+    values = list(basket_price.values())
+    second_element = values[0]
+    third_element = values[1]
+
+    # Извлекаем значения из элементов
+    value_second = float(second_element)
+    value_third = float(third_element) / x
+
+    # Вычисляем разницу
+    difference = "{:.3f}".format(value_third - value_second)
+    result = f"Спред {quarterly} - {perpetual}: {difference}\n"
+
+    print(result)
+
+    return result
+
+
+def calculate_difference_share(share, basket_price):
+    spot = 'MGNT'
+    features = 'MGNT-12.23'
+    # x = 1000
+
+    values = list(basket_price.values())
+    second_element = values[0]
+    third_element = values[1]
+
+    # Извлекаем значения из элементов
+    value_second = float(second_element)
+    value_third = float(third_element)
+
+    # Вычисляем разницу
+    difference = "{:.3f}".format(value_second - value_third)
+    result = f"Спред {spot} - {features}: {difference}\n"
+
+    print(result)
+
+    return result
+
 def write_spread(currience, diff):
     txt = 'usd.txt'
     if currience == eur:
         txt = 'eur.txt'
     if currience == cny:
         txt = 'cny.txt'
+
+    with open(txt, 'w', encoding='utf-8') as file:
+        pass
+        file.write(diff)
+
+def write_spread_share(share, diff):
+    txt = 'mgnt.txt'
+    # if share == eur:
+    #     txt = 'eur.txt'
 
     with open(txt, 'w', encoding='utf-8') as file:
         pass
@@ -250,29 +288,39 @@ def createTxtFile(txt_file):
 
 usd = (
 
-    {'code': 'BBG0013HGFT4'},  # USDRUB
+    {'code': 'BBG0013HGFT4'},
     {'code': 'FUTUSDRUBF00'},
-    {'code': 'FUTSI1223000'}  # SIZ3
+    {'code': 'FUTSI1223000'}
 )
 
 eur = (
 
 
     {'code': 'FUTEURRUBF00'},
-    {'code': 'FUTEU1223000'}  # SIZ3
+    {'code': 'FUTEU1223000'}
 )
 
 cny = (
 
-    {'code': 'BBG0013HRTL0'},  # USDRUB
+    {'code': 'BBG0013HRTL0'},
     {'code': 'FUTCNYRUBF00'},
-    {'code': 'FUTCNY122300'}  # SIZ3
+    {'code': 'FUTCNY122300'}
 )
+
+mgnt = (
+
+    {'code': 'BBG004RVFCY3'},
+    {'code': 'FUTMGNT12230'}
+)
+
+
 
 # Создаем файлы для оповещения по сигналу
 createTxtFile('usd_firstspread_and_signal.txt')
 createTxtFile('eur_firstspread_and_signal.txt')
 createTxtFile('cny_firstspread_and_signal.txt')
+
+createTxtFile('mgnt_firstspread_and_signal.txt')
 
 while True:
 
@@ -287,6 +335,7 @@ while True:
     usd_prices = {}
     eur_prices = {}
     cny_prices = {}
+    mgnt_prices = {}
 
     # Подпишитесь на стакан для каждого актива
     for asset in usd:
@@ -311,7 +360,7 @@ while True:
     print(eur_prices)
 
     # В asset_prices будут сохранены цены активов
-    diff = calculate_difference(eur, eur_prices)
+    diff = calculate_difference_eur(eur, eur_prices)
     if diff is not None:
         write_spread(eur, diff)
 
@@ -330,6 +379,20 @@ while True:
         write_spread(cny, diff)
 
 
+    # Подпишитесь на стакан для каждого актива
+    for asset in mgnt:
+        if asset['code'] not in mgnt:
+            price = subscribe_and_save_price(asset, mgnt_prices)
+            if price != None:
+                mgnt_prices[asset['code']] = price
+                print(mgnt_prices)
+
+    # В asset_prices будут сохранены цены активов
+    diff = calculate_difference_share(mgnt, mgnt_prices)
+    if diff is not None:
+        write_spread_share(mgnt, diff)
+
+
 
     # Для примера, я задам их статически________________________________________________________________________________
 
@@ -342,6 +405,10 @@ while True:
     check_only_signal('USD', 'usd.txt', 'usd_firstspread_and_signal.txt')
     check_only_signal('EUR', 'eur.txt', 'eur_firstspread_and_signal.txt')
     check_only_signal('CNY', 'cny.txt', 'cny_firstspread_and_signal.txt')
+
+    check_signal('MGNT', 'mgnt.txt', 'mgnt_tvh.txt', 'mgnt_signal.txt')
+    check_signal('MGNT', 'mgnt.txt', 'mgnt_spread_only.txt', 'mgnt_signal_only.txt')
+    check_only_signal('MGNT', 'mgnt.txt', 'mgnt_firstspread_and_signal.txt')
 
 
     time.sleep(5)
