@@ -11,19 +11,7 @@ from aiogram.dispatcher.filters import Text
 from aiogram.types import ReplyKeyboardRemove
 from aiogram.utils import executor
 
-from keyboard import greet_kb1, spread_keyboard, usd_fiks_keyboard, eur_fiks_keyboard, cny_fiks_keyboard, \
-    usd_yes_no_keyboard, eur_yes_no_keyboard, cny_yes_no_keyboard, usd_sbros_keyboard, eur_sbros_keyboard, \
-    cny_sbros_keyboard, \
-    signal_keyboard, usd_signal_keyboard, eur_signal_keyboard, cny_signal_keyboard, \
-    usd_signal_sbros_keyboard, eur_signal_sbros_keyboard, cny_signal_sbros_keyboard, signal_only_keyboard, \
-    usd_signal_only_keyboard, eur_signal_only_keyboard, cny_signal_only_keyboard, \
-    usd_signal_only_sbros_keyboard, eur_signal_only_sbros_keyboard, cny_signal_only_sbros_keyboard, \
-    signal_firstspread_keyboard, \
-    usd_signal_firstspread_keyboard, eur_signal_firstspread_keyboard, cny_signal_firstspread_keyboard, \
-    usd_signal_firstspread_sbros_keyboard, eur_signal_firstspread_sbros_keyboard, cny_signal_firstspread_sbros_keyboard, \
-    mgnt_fiks_keyboard, mgnt_yes_no_keyboard, mgnt_signal_keyboard, mgnt_signal_sbros_keyboard, \
-    mgnt_signal_only_keyboard, mgnt_signal_only_sbros_keyboard, mgnt_signal_firstspread_keyboard, \
-    mgnt_signal_firstspread_sbros_keyboard, mgnt_sbros_keyboard
+from keyboard import *
 
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher import FSMContext, storage
